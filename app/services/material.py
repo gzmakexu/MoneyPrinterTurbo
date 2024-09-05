@@ -3,6 +3,7 @@ import random
 from urllib.parse import urlencode
 
 import requests
+import struct
 from typing import List
 from loguru import logger
 from moviepy.video.io.VideoFileClip import VideoFileClip
@@ -40,7 +41,15 @@ def search_videos_pexels(
     video_orientation = aspect.name
     video_width, video_height = aspect.to_resolution()
     api_key = get_api_key("pexels_api_keys")
-    headers = {"Authorization": api_key}
+    headers = {
+        "Authorization": api_key,
+        "Pragma": "no-cache",
+        "Cache-Control": "no-cache",
+        "Origin": "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36 Edg/91.0.864.41"
+    }
     # Build URL
     params = {"query": search_term, "per_page": 20, "orientation": video_orientation}
     query_url = f"https://api.pexels.com/videos/search?{urlencode(params)}"
@@ -159,10 +168,18 @@ def save_video(video_url: str, save_dir: str = "") -> str:
         return video_path
 
     # if video does not exist, download it
+    headers = {
+        "Pragma": "no-cache",
+        "Cache-Control": "no-cache",
+        "Origin": "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36 Edg/91.0.864.41"
+    }
     with open(video_path, "wb") as f:
         f.write(
             requests.get(
-                video_url, proxies=config.proxy, verify=False, timeout=(60, 240)
+                video_url, proxies=config.proxy, headers=headers, verify=False, timeout=(60, 240)
             ).content
         )
 
@@ -175,11 +192,32 @@ def save_video(video_url: str, save_dir: str = "") -> str:
             if duration > 0 and fps > 0:
                 return video_path
         except Exception as e:
-            try:
-                os.remove(video_path)
-            except Exception as e:
-                pass
             logger.warning(f"invalid video file: {video_path} => {str(e)}")
+
+        # moov info behind data
+        seek = 0
+        with open(video_path, 'rb') as f:
+            try:
+                while True:
+                    f.seek(seek, os.SEEK_SET)
+                    data = f.read(8)
+                    size = int(struct.unpack('>I', data[:4])[0])
+                    flag = data[-4:].decode('ascii')
+                    if flag == 'moov':
+                        f.seek(seek + 4 + 4 + 20, os.SEEK_SET)
+                        data = f.read(8)
+                        time_scale = int(struct.unpack('>I', data[:4])[0])
+                        duration = int(struct.unpack('>I', data[-4:])[0])
+                        duration = duration / time_scale
+                        return video_path
+                    else:
+                        self.seek += size
+            except Exception as e:
+                try:
+                    os.remove(video_path)
+                except Exception as e:
+                    pass
+                logger.warning(f"invalid video file: {video_path} => {str(e)}")
     return ""
 
 
