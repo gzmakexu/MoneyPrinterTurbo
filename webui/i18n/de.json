@@ -20,6 +20,7 @@
     "Portrait": "Portrait 9:16",
     "Landscape": "Landschaft 16:9",
     "Clip Duration": "Maximale Dauer einzelner Videoclips in sekunden",
+    "Video Expand": "Video erweitern",
     "Number of Videos Generated Simultaneously": "Anzahl der parallel generierten Videos",
     "Audio Settings": "**Audio Einstellungen**",
     "Speech Synthesis": "Sprachausgabe",

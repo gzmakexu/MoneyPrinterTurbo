@@ -36,6 +36,7 @@ def combine_videos(
     video_concat_mode: VideoConcatMode = VideoConcatMode.random,
     max_clip_duration: int = 5,
     threads: int = 2,
+    video_expand: bool = True
 ) -> str:
     audio_clip = AudioFileClip(audio_file)
     audio_duration = audio_clip.duration
@@ -53,76 +54,95 @@ def combine_videos(
     video_duration = 0
 
     raw_clips = []
+    raw_clips_all = [[]]
     for video_path in video_paths:
         clip = VideoFileClip(video_path).without_audio()
         clip_duration = clip.duration
         start_time = 0
+        index = 1
 
         while start_time < clip_duration:
             end_time = min(start_time + max_clip_duration, clip_duration)
             split_clip = clip.subclip(start_time, end_time)
-            raw_clips.append(split_clip)
             # logger.info(f"splitting from {start_time:.2f} to {end_time:.2f}, clip duration {clip_duration:.2f}, split_clip duration {split_clip.duration:.2f}")
             start_time = end_time
-            if video_concat_mode.value == VideoConcatMode.sequential.value:
+            if video_concat_mode.value == VideoConcatMode.sequential.value and not video_expand:
+                raw_clips.append(split_clip)
                 break
+
+            raw_clips.append(split_clip)
+            if video_expand:
+                if len(raw_clips_all) < index:
+                    raw_clips_all.append([])
+                raw_clips_all[index-1].append(split_clip)
+                index += 1
 
     # random video_paths order
     if video_concat_mode.value == VideoConcatMode.random.value:
         random.shuffle(raw_clips)
 
+        tmp_clips_all = []
+        for tmp_clips in raw_clips_all:
+            random.shuffle(tmp_clips)
+            tmp_clips_all.append(tmp_clips)
+        raw_clips_all = tmp_clips_all
+
+
+    if not video_expand:
+        raw_clips_all = [raw_clips]
     # Add downloaded clips over and over until the duration of the audio (max_duration) has been reached
     while video_duration < audio_duration:
-        for clip in raw_clips:
-            # Check if clip is longer than the remaining audio
-            if (audio_duration - video_duration) < clip.duration:
-                clip = clip.subclip(0, (audio_duration - video_duration))
-            # Only shorten clips if the calculated clip length (req_dur) is shorter than the actual clip to prevent still image
-            elif req_dur < clip.duration:
-                clip = clip.subclip(0, req_dur)
-            clip = clip.set_fps(30)
+        for raw_clips in raw_clips_all:
+            for clip in raw_clips:
+                # Check if clip is longer than the remaining audio
+                if (audio_duration - video_duration) < clip.duration:
+                    clip = clip.subclip(0, (audio_duration - video_duration))
+                # Only shorten clips if the calculated clip length (req_dur) is shorter than the actual clip to prevent still image
+                elif req_dur < clip.duration:
+                    clip = clip.subclip(0, req_dur)
+                clip = clip.set_fps(30)
 
-            # Not all videos are same size, so we need to resize them
-            clip_w, clip_h = clip.size
-            if clip_w != video_width or clip_h != video_height:
-                clip_ratio = clip.w / clip.h
-                video_ratio = video_width / video_height
+                # Not all videos are same size, so we need to resize them
+                clip_w, clip_h = clip.size
+                if clip_w != video_width or clip_h != video_height:
+                    clip_ratio = clip.w / clip.h
+                    video_ratio = video_width / video_height
 
-                if clip_ratio == video_ratio:
-                    # 等比例缩放
-                    clip = clip.resize((video_width, video_height))
-                else:
-                    # 等比缩放视频
-                    if clip_ratio > video_ratio:
-                        # 按照目标宽度等比缩放
-                        scale_factor = video_width / clip_w
+                    if clip_ratio == video_ratio:
+                        # 等比例缩放
+                        clip = clip.resize((video_width, video_height))
                     else:
-                        # 按照目标高度等比缩放
-                        scale_factor = video_height / clip_h
+                        # 等比缩放视频
+                        if clip_ratio > video_ratio:
+                            # 按照目标宽度等比缩放
+                            scale_factor = video_width / clip_w
+                        else:
+                            # 按照目标高度等比缩放
+                            scale_factor = video_height / clip_h
 
-                    new_width = int(clip_w * scale_factor)
-                    new_height = int(clip_h * scale_factor)
-                    clip_resized = clip.resize(newsize=(new_width, new_height))
+                        new_width = int(clip_w * scale_factor)
+                        new_height = int(clip_h * scale_factor)
+                        clip_resized = clip.resize(newsize=(new_width, new_height))
 
-                    background = ColorClip(
-                        size=(video_width, video_height), color=(0, 0, 0)
+                        background = ColorClip(
+                            size=(video_width, video_height), color=(0, 0, 0)
+                        )
+                        clip = CompositeVideoClip(
+                            [
+                                background.set_duration(clip.duration),
+                                clip_resized.set_position("center"),
+                            ]
+                        )
+
+                    logger.info(
+                        f"resizing video to {video_width} x {video_height}, clip size: {clip_w} x {clip_h}"
                     )
-                    clip = CompositeVideoClip(
-                        [
-                            background.set_duration(clip.duration),
-                            clip_resized.set_position("center"),
-                        ]
-                    )
 
-                logger.info(
-                    f"resizing video to {video_width} x {video_height}, clip size: {clip_w} x {clip_h}"
-                )
+                if clip.duration > max_clip_duration:
+                    clip = clip.subclip(0, max_clip_duration)
 
-            if clip.duration > max_clip_duration:
-                clip = clip.subclip(0, max_clip_duration)
-
-            clips.append(clip)
-            video_duration += clip.duration
+                clips.append(clip)
+                video_duration += clip.duration
 
     video_clip = concatenate_videoclips(clips)
     video_clip = video_clip.set_fps(30)

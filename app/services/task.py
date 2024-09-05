@@ -181,6 +181,7 @@ def generate_final_videos(
             video_concat_mode=video_concat_mode,
             max_clip_duration=params.video_clip_duration,
             threads=params.n_threads,
+            video_expand=params.video_expand,
         )
 
         _progress += 50 / params.video_count / 2

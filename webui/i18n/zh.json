@@ -20,6 +20,7 @@
     "Portrait": "竖屏 9:16（抖音视频）",
     "Landscape": "横屏 16:9（西瓜视频）",
     "Clip Duration": "视频片段最大时长(秒)（**不是视频总长度**，是指每个**合成片段**的长度）",
+    "Video Expand": "视频扩展",
     "Number of Videos Generated Simultaneously": "同时生成视频数量",
     "Audio Settings": "**音频设置**",
     "Speech Synthesis": "朗读声音（:red[**与文案语言保持一致**。注意：V2版效果更好，但是需要API KEY]）",
